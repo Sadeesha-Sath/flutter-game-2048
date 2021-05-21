@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_game_2048/src/models/tile.dart';
-import 'package:flutter_game_2048/src/ui/ui_constants.dart';
+import 'package:flutter_game_2048/src/logic/methods.dart';
+import 'package:flutter_game_2048/src/ui/screens/custom_bottom_sheet.dart';
 
 class MainScreen extends StatefulWidget {
   @override
@@ -18,57 +19,53 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     controller = AnimationController(vsync: this, duration: Duration(milliseconds: 200));
-    controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        toAdd.forEach((element) {
-          grid[element.y][element.x].val = element.val;
-        });
-        flattenedGrid.forEach((element) {
-          element.resetAnimations();
-        });
-        print("Checking");
-        if (!flattenedGrid.any((element) => element.val == 0)) {
-          bool gameOver = isGameOver();
-          print("Is game Over $gameOver");
-          if (gameOver) {
-            showModalBottomSheet(
-                context: context,
-                enableDrag: true,
-                backgroundColor: Colors.amber.shade100,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
-                  ),
-                ),
-                builder: (context) => Container());
+    controllerAddStatusListener();
+    initializeGame(grid, flattenedGrid);
+  }
+
+  void controllerAddStatusListener() {
+    return controller.addStatusListener(
+      (status) {
+        if (status == AnimationStatus.completed) {
+          toAdd.forEach((element) {
+            grid[element.y][element.x].val = element.val;
+          });
+          flattenedGrid.forEach((element) {
+            element.resetAnimations();
+          });
+          if (flattenedGrid.any((element) => element.val == 2048)) {
+            // Player Wins
+            showCustomBottomSheet(
+              context,
+              () {
+                setState(() {
+                  resetGame();
+                  Navigator.pop(context);
+                });
+              },
+              title: "You Win!",
+              buttonText: "Up for another challenge?",
+            );
+          }
+          if (!flattenedGrid.any((element) => element.val == 0)) {
+            bool gameOver = isGameOver(grid, columns);
+            if (gameOver) {
+              showCustomBottomSheet(context, () {
+                setState(() {
+                  resetGame();
+                  Navigator.pop(context);
+                });
+              });
+            }
           }
         }
-      }
-    });
+      },
+    );
+  }
 
-    // TODO Dynamically add values
-    // TODO Add Game Over
-    // TODO Add reset Functionality
-    // TODO Refractor code
-    // TODO Improve the algorithm
-
-    grid[1][2].val = 4;
-    grid[3][2].val = 16;
-    grid[0][1].val = 2;
-    grid[0][0].val = 2;
-    grid[3][2].val = 4;
-    grid[1][2].val = 16;
-    grid[1][1].val = 2;
-    grid[3][3].val = 2;
-    grid[2][2].val = 4;
-    grid[2][1].val = 16;
-    grid[2][3].val = 2;
-    grid[3][0].val = 2;
-
-    flattenedGrid.forEach((element) {
-      element.resetAnimations();
-    });
+  void resetGame() {
+    grid = List.generate(4, (y) => List.generate(4, (x) => Tile(x, y, 0)));
+    initializeGame(grid, flattenedGrid);
   }
 
   void addNewTile() {
@@ -78,91 +75,31 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     toAdd.add(Tile(empty.first.x, empty.first.y, 2)..appear(controller));
   }
 
-  bool isGameOver() {
-    for (List<Tile> row in grid) {
-      for (int i = 0; i < 3; ++i) {
-        if (row[i].val == row[i + 1].val) {
-          return false;
-        }
-      }
-    }
-    for (List<Tile> column in columns) {
-      for (int i = 0; i < 3; ++i) {
-        if (column[i].val == column[i + 1].val) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }
-
   @override
   Widget build(BuildContext context) {
     double gridSize = MediaQuery.of(context).size.width - 15 * 2;
     double tileSize = (gridSize - 4 * 2) / 4;
     List<Widget> stackItem = [];
-    stackItem.addAll(
-      flattenedGrid.map(
-        (e) => Positioned(
-          left: e.x * tileSize,
-          top: e.y * tileSize,
-          width: tileSize,
-          height: tileSize,
-          child: Center(
-            child: Container(
-              width: tileSize - 4 * 2,
-              height: tileSize - 4 * 2,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: kTileBackgroundColor,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    stackItem.addAll(
-      [flattenedGrid, toAdd].expand((element) => element).map(
-            (e) => AnimatedBuilder(
-              animation: controller,
-              builder: (context, child) => e.animatedValue.value == 0
-                  ? SizedBox()
-                  : Positioned(
-                      left: e.animatedX.value * tileSize,
-                      top: e.animatedY.value * tileSize,
-                      width: tileSize,
-                      height: tileSize,
-                      child: Center(
-                        child: Container(
-                          width: (tileSize - 4 * 2) * e.scale.value,
-                          height: (tileSize - 4 * 2) * e.scale.value,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            color: kNumTileColors[e.animatedValue.value],
-                          ),
-                          child: Center(
-                            child: Text(
-                              "${e.animatedValue.value}",
-                              style: TextStyle(
-                                fontSize: 35,
-                                fontWeight: FontWeight.w900,
-                                color: e.animatedValue.value <= 4 ? Colors.grey.shade700 : Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
-          ),
-    );
+    buildAddAll(stackItem: stackItem, tileSize: tileSize, flattenedGrid: flattenedGrid);
+    buildAddAllListContent(
+        stackItem: stackItem, tileSize: tileSize, controller: controller, flattenedGrid: flattenedGrid, toAdd: toAdd);
     return Scaffold(
       backgroundColor: Colors.amber[50],
       appBar: AppBar(
         centerTitle: true,
         title: Text("2048"),
-        actions: [IconButton(onPressed: () {}, icon: Icon(Icons.settings_backup_restore_outlined))],
+        actions: [
+          IconButton(
+            onPressed: () {
+              setState(() {
+                resetGame();
+              });
+            },
+            icon: Icon(
+              Icons.settings_backup_restore_outlined,
+            ),
+          ),
+        ],
       ),
       body: GestureDetector(
         onVerticalDragEnd: (details) {
@@ -217,23 +154,6 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
 
   bool canSwipeUp() => columns.any(canSwipe);
   bool canSwipeDown() => columns.map((e) => e.reversed.toList()).any(canSwipe);
-
-  bool canSwipe(List<Tile> tiles) {
-    for (int i = 0; i < tiles.length; ++i) {
-      if (tiles[i].val == 0) {
-        if (tiles.skip(i + 1).any((element) => element.val != 0)) {
-          return true;
-        }
-      } else {
-        Tile? nextNonZero = tiles.skip(i + 1).firstWhere((element) => element.val != 0, orElse: () => Tile(-1, -1, -1));
-        if (nextNonZero.val == -1) nextNonZero = null;
-        if (nextNonZero != null && nextNonZero.val == tiles[i].val) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
 
   void swipeLeft() => grid.forEach(mergeTiles);
   void swipeRight() => grid.map((e) => e.reversed.toList()).forEach(mergeTiles);
